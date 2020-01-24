@@ -55,9 +55,6 @@ class preproc_imgs:
 
         self.thediff = np.int(self.rightfur[0] - self.leftfur[0])
 
-    def sub2ind(array_shape, rows, cols):
-        return rows * array_shape[1] + cols
-
     def proc_imgs(self, path):
 
         I = io.imread(path)
@@ -88,27 +85,25 @@ class preproc_imgs:
 
         ## ## ## ## sgolay trench edge finder ## ## ## ##
         trench_feat = np.zeros((self.thediff + 1, 1))
-        ## Need trench width, ## good, asymmetry, etc as matrics
-        for n in range(1,self.thediff + 1+1):
-            linearr = (self.leftfur * (self.thediff - n + 1) + self.rightfur * (n - 1)) / self.thediff
-            trench_feat[n, 1] = np.mean(trench[self.sub2ind(trench.shape, self.ymat, np.uint8(linearr))])
+        for n in range(self.thediff + 1):
+            linearr = np.round((self.leftfur * (self.thediff - n + 1) + self.rightfur * (n - 1)) / self.thediff, 0).astype(np.int)
+            trench_feat[n] = np.mean(trench[self.ymat, linearr])
 
-        trench_feat_filt_diff = np.diff(savgol_filter(trench_feat, 23, 2))
-        zci = lambda v: np.where(np.product(v.reshape(-1),np.roll(v.reshape(-1), [-1, 0])) <= 0)[0]
+        trench_feat_filt_diff = np.diff(savgol_filter(trench_feat.squeeze(), 13, 2))
+        zci = lambda v: np.where(v * np.roll(v, [-1, 0]) <= 0)[0]
         trench_feat_zero_locs = zci(trench_feat_filt_diff)
 
         trenchmag_thresh = 0.15
-        mag_change = trench_feat[trench_feat_zero_locs[2:]] - trench_feat[trench_feat_zero_locs[1:-1]]
-        trench_left_loc = 20
-        trench_right_loc = len(trench_feat) - 20
+        mag_change = trench_feat[trench_feat_zero_locs[1:]] - trench_feat[trench_feat_zero_locs[0:-1]]
+        trench_left_loc = 10
+        trench_right_loc = len(trench_feat) - 10
         temp = np.where(mag_change > trenchmag_thresh)[0]
         if np.size(temp) > 0:
-            trench_left_loc = trench_feat_zero_locs[temp[1]]
+            trench_left_loc = trench_feat_zero_locs[temp][0]
 
         temp = np.where(-mag_change > trenchmag_thresh)[0]
         if np.size(temp) > 0:
-            trench_right_loc = trench_feat_zero_locs[temp[-1] + 1]
-
+            trench_right_loc = trench_feat_zero_locs[temp + 1][0]
 
         ## ## ## if edges are messed up then swap them
         if trench_left_loc >= trench_right_loc:
@@ -121,7 +116,7 @@ class preproc_imgs:
         ## (3)store in vectors as signal for log
         trench_inside_tr_meanperc_signal = np.median(trench_feat[trench_left_loc:trench_right_loc])
         ## ## ## median
-        trench_outside_tr_meanperc_signal = np.median(np.vstack(trench_feat[1:trench_left_loc], trench_feat[trench_right_loc:]))
+        trench_outside_tr_meanperc_signal = np.median(np.vstack((trench_feat[1:trench_left_loc], trench_feat[trench_right_loc:])))
 
         median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
 
