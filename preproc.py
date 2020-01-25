@@ -75,13 +75,16 @@ class preproc_imgs:
         rgb = np.array([R, G, B]).T
         C = KMeans(knum, max_iter=500).fit(np.double(rgb))
 
+        # self.C = C ## make sure this is converging
+
         VAL = np.mean(C.cluster_centers_,axis=1)
         IND = np.argmin(VAL)
 
         ## ## find ground labels
         trench = C.labels_.reshape(I2.shape[:2])
-        trench[trench != IND] = 0
-        trench[trench != 0] = 1
+        trench[trench != IND] = -1
+        trench[trench == IND] = 1
+        trench[trench == -1] = 0
 
         ## ## ## ## sgolay trench edge finder ## ## ## ##
         trench_feat = np.zeros((self.thediff + 1, 1))
@@ -99,11 +102,11 @@ class preproc_imgs:
         trench_right_loc = len(trench_feat) - 10
         temp = np.where(mag_change > trenchmag_thresh)[0]
         if np.size(temp) > 0:
-            trench_left_loc = trench_feat_zero_locs[temp][0]
+            trench_left_loc = trench_feat_zero_locs[temp[0]]
 
         temp = np.where(-mag_change > trenchmag_thresh)[0]
         if np.size(temp) > 0:
-            trench_right_loc = trench_feat_zero_locs[temp + 1][0]
+            trench_right_loc = trench_feat_zero_locs[temp[-1] + 1]
 
         ## ## ## if edges are messed up then swap them
         if trench_left_loc >= trench_right_loc:
