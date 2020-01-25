@@ -123,4 +123,4 @@ class preproc_imgs:
 
         median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
 
-        return median_fur_quality
+        return median_fur_quality, I2
