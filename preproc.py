@@ -6,8 +6,7 @@ from scipy.signal import savgol_filter
 
 class preproc_imgs:
 
-    def __init__(self,
-                 path=None):
+    def __init__(self, path=None):
         #### read in data directory of images
         self.IMsizereduce = 0.1
 
