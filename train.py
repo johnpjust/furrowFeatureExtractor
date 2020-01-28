@@ -13,35 +13,37 @@ import pathlib
 import scipy
 import sklearn.mixture
 from skimage.transform import resize
+from preproc import *
 
 # def img_preprocessing(x_in, args):
 #
 #     return rand_crop, tf.squeeze(tf.matmul(tf.reshape(rand_crop, [1,-1]), args.vh))
 
-def load_dataset(args):
+def load_dataset(args, listing):
     tf.random.set_seed(args.manualSeed)
     np.random.seed(args.manualSeed)
     random.seed(args.manualSeed)
 
-    train_data = glob.glob(r'D:\GQC_Images\GQ_Images\Corn_2017_2018/*.png')
-    train_data = np.vstack([np.expand_dims(img_load(x, args), axis=0) for x in train_data])/128.0 - 1
-    test_data = glob.glob(r'D:\GQC_Images\GQ_Images\test_images_broken/*.png')
-    test_data = np.vstack([np.expand_dims(img_load(x, args), axis=0) for x in test_data])/128.0 - 1
+    preproc_imgs_ = preproc_imgs(listing[0])
 
+    img_preprocessing_ = preproc_imgs_.proc_imgs
 
-    img_preprocessing_ =
+    data_split_ind = np.random.permutation(len(listing))
+    train_ind = data_split_ind[:int((1-2*args.p_val)*len(data_split_ind))]
+    val_ind = data_split_ind[int((1 - 2 * args.p_val) * len(data_split_ind)):int((1 - args.p_val) * len(data_split_ind))]
+    test_ind = data_split_ind[int((1 - args.p_val) * len(data_split_ind)):]
 
-    dataset_train = tf.data.Dataset.from_tensor_slices(train_data.astype(np.float32))  # .float().to(args.device)
-    dataset_train = dataset_train.shuffle(buffer_size=len(train_data)).map(img_preprocessing_,
+    dataset_train = tf.data.Dataset.from_tensor_slices(listing[train_ind])  # .float().to(args.device)
+    dataset_train = dataset_train.shuffle(buffer_size=len(train_ind)).map(img_preprocessing_,
         num_parallel_calls=args.parallel).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
     # dataset_train = dataset_train.shuffle(buffer_size=len(train)).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
 
-    dataset_valid = tf.data.Dataset.from_tensor_slices(train_data.astype(np.float32))  # .float().to(args.device)
+    dataset_valid = tf.data.Dataset.from_tensor_slices(listing[val_ind])  # .float().to(args.device)
     dataset_valid = dataset_valid.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
         batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
     # dataset_valid = dataset_valid.batch(batch_size=args.batch_dim*2).prefetch(buffer_size=args.prefetch_size)
 
-    dataset_test = tf.data.Dataset.from_tensor_slices(test_data.astype(np.float32))  # .float().to(args.device)
+    dataset_test = tf.data.Dataset.from_tensor_slices(listing[test_ind])  # .float().to(args.device)
     dataset_test = dataset_test.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
         batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
 
@@ -108,7 +110,7 @@ def train(model, optimizer, scheduler, data_loader_train, data_loader_val, data_
 
         test_loss=[]
         for x_mb, y_mb in data_loader_test:
-            loss = tf.reduce_mean(tf.math.squared_difference(y_mb/y_mb_scalar, model(x_mb, training=False))).numpy()
+            loss = tf.reduce_mean(tf.math.squared_difference(y_mb, model(x_mb, training=False))).numpy()
             test_loss.append(loss)
         test_loss = tf.reduce_mean(test_loss)
 
@@ -154,7 +156,7 @@ if gpus:
 args = parser_()
 args.device = '/gpu:0'  # '/gpu:0'
 args.dataset = 'furrow'  # 'gq_ms_wheat_johnson'#'gq_ms_wheat_johnson' #['gas', 'bsds300', 'hepmass', 'miniboone', 'power']
-args.batch_dim = 500
+args.batch_dim = 100
 args.clip_norm = 0.1
 args.epochs = 5000
 args.patience = 10
@@ -164,14 +166,13 @@ args.tensorboard = r'C:\Users\justjo\PycharmProjects\furrowFeatureExtractor\tens
 args.early_stopping = 50
 args.manualSeed = None
 args.manualSeedw = None
-args.prefetch_size = 1  # data pipeline prefetch buffer size
+args.prefetch_size = 2  # data pipeline prefetch buffer size
 args.parallel = 8  # data pipeline parallel processes
 args.preserve_aspect_ratio = True;  ##when resizing
+args.p_val = 0.2
 
 
-args.path = os.path.join(args.tensorboard,
-                         'boxsize{}{}_{}'.format(args.img_size,args.rand_box_init,
-                             str(datetime.datetime.now())[:-7].replace(' ', '-').replace(':', '-')))
+args.path = os.path.join(args.tensorboard, 'furrowfeat_{}'.format(str(datetime.datetime.now())[:-7].replace(' ', '-').replace(':', '-')))
 
 listing = []
 listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png'))
@@ -179,7 +180,7 @@ listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurro
 listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png'))
 
 print('Loading dataset..')
-data_loader_train, data_loader_valid, data_loader_test = load_dataset(args)
+data_loader_train, data_loader_valid, data_loader_test = load_dataset(args, listing)
 
 if args.save and not args.load:
     print('Creating directory experiment..')

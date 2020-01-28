@@ -20,7 +20,7 @@ class preproc_imgs:
         #### get the first image to set things up
         self.quantileVal = 0.90
         I = io.imread(path)
-        Irs = transform.rescale(I, self.IMsizereduce)
+        Irs = transform.rescale(I, self.IMsizereduce, multichannel=True)
         Irs = Irs[:,30:130,:] ## cut off edges where black -- loses come context due to angled mask
         light_scalar = 80/np.double(np.quantile(Irs.reshape((-1)), self.quantileVal))
         ###### background = imread('C:\Users\justjo\Desktop\background.png');
@@ -122,4 +122,4 @@ class preproc_imgs:
 
         median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
 
-        return median_fur_quality, I2
+        return I2, median_fur_quality
