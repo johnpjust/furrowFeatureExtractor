@@ -24,6 +24,7 @@ def load_dataset(args, listing):
     np.random.seed(args.manualSeed)
     random.seed(args.manualSeed)
 
+    listing = np.array(listing)
     preproc_imgs_ = preproc_imgs(listing[0])
 
     img_preprocessing_ = preproc_imgs_.proc_imgs

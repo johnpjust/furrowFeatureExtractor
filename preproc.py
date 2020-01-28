@@ -10,6 +10,11 @@ class preproc_imgs:
         #### read in data directory of images
         self.IMsizereduce = 0.1
 
+        try:
+            path = path.numpy().decode('UTF-8')
+        except:
+            pass
+
         # listing = glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png')
         ## listing = dir('Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png');
         ## listing = dir('Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png');
@@ -55,6 +60,11 @@ class preproc_imgs:
         self.thediff = np.int(self.rightfur[0] - self.leftfur[0])
 
     def proc_imgs(self, path):
+
+        try:
+            path = path.numpy().decode('UTF-8')
+        except:
+            pass
 
         I = io.imread(path)
         Irs = transform.rescale(I, self.IMsizereduce)
