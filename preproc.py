@@ -3,17 +3,14 @@ import glob
 import numpy as np
 from sklearn.cluster import KMeans
 from scipy.signal import savgol_filter
+from multiprocessing import Pool
+import tqdm
 
 class preproc_imgs:
 
     def __init__(self, path=None):
         #### read in data directory of images
         self.IMsizereduce = 0.1
-
-        try:
-            path = path.numpy().decode('UTF-8')
-        except:
-            pass
 
         # listing = glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png')
         ## listing = dir('Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png');
@@ -61,13 +58,9 @@ class preproc_imgs:
 
     def proc_imgs(self, path):
 
-        try:
-            path = path.numpy().decode('UTF-8')
-        except:
-            pass
-
         I = io.imread(path)
-        Irs = transform.rescale(I, self.IMsizereduce)
+
+        Irs = transform.rescale(I, self.IMsizereduce, multichannel=True)
         Irs = Irs[:,30:130,:] ## cut off edges where black -- loses come context due to angled mask
         light_scalar = 80/np.double(np.quantile(Irs.reshape((-1)), self.quantileVal))
         ###### background = imread('C:\Users\justjo\Desktop\background.png');
@@ -133,3 +126,16 @@ class preproc_imgs:
         median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
 
         return I2, median_fur_quality
+
+
+listing = []
+listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png'))
+listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png'))
+listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png'))
+
+preproc_imgs_ = preproc_imgs(listing[0])
+
+with Pool(8) as p:
+    proc_imgs_list = list(tqdm.tqdm(p.map(preproc_imgs_.proc_imgs, listing), total=len(listing)))
+
+np.save(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\extracted_trench_quality_signals\feat_ext_preproc_data.npy', proc_imgs_list)

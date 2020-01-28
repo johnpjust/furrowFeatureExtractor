@@ -13,7 +13,6 @@ import pathlib
 import scipy
 import sklearn.mixture
 from skimage.transform import resize
-from preproc import *
 
 # def img_preprocessing(x_in, args):
 #
@@ -24,7 +23,6 @@ def load_dataset(args, listing):
     np.random.seed(args.manualSeed)
     random.seed(args.manualSeed)
 
-    listing = np.array(listing)
     preproc_imgs_ = preproc_imgs(listing[0])
 
     img_preprocessing_ = preproc_imgs_.proc_imgs
@@ -34,19 +32,19 @@ def load_dataset(args, listing):
     val_ind = data_split_ind[int((1 - 2 * args.p_val) * len(data_split_ind)):int((1 - args.p_val) * len(data_split_ind))]
     test_ind = data_split_ind[int((1 - args.p_val) * len(data_split_ind)):]
 
-    dataset_train = tf.data.Dataset.from_tensor_slices(listing[train_ind])  # .float().to(args.device)
-    dataset_train = dataset_train.shuffle(buffer_size=len(train_ind)).map(img_preprocessing_,
-        num_parallel_calls=args.parallel).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
-    # dataset_train = dataset_train.shuffle(buffer_size=len(train)).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
-
-    dataset_valid = tf.data.Dataset.from_tensor_slices(listing[val_ind])  # .float().to(args.device)
-    dataset_valid = dataset_valid.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
-        batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
-    # dataset_valid = dataset_valid.batch(batch_size=args.batch_dim*2).prefetch(buffer_size=args.prefetch_size)
-
-    dataset_test = tf.data.Dataset.from_tensor_slices(listing[test_ind])  # .float().to(args.device)
-    dataset_test = dataset_test.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
-        batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
+    # dataset_train = tf.data.Dataset.from_tensor_slices(listing[train_ind])  # .float().to(args.device)
+    # dataset_train = dataset_train.shuffle(buffer_size=len(train_ind)).map(img_preprocessing_,
+    #     num_parallel_calls=args.parallel).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
+    # # dataset_train = dataset_train.shuffle(buffer_size=len(train)).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
+    #
+    # dataset_valid = tf.data.Dataset.from_tensor_slices(listing[val_ind])  # .float().to(args.device)
+    # dataset_valid = dataset_valid.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
+    #     batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
+    # # dataset_valid = dataset_valid.batch(batch_size=args.batch_dim*2).prefetch(buffer_size=args.prefetch_size)
+    #
+    # dataset_test = tf.data.Dataset.from_tensor_slices(listing[test_ind])  # .float().to(args.device)
+    # dataset_test = dataset_test.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
+    #     batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
 
     return dataset_train, dataset_valid, dataset_test
 
