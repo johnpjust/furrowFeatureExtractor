@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 from scipy.signal import savgol_filter
 from multiprocessing import Pool
 import tqdm
+import warnings
 
 class preproc_imgs:
 
@@ -21,7 +22,7 @@ class preproc_imgs:
 
         #### get the first image to set things up
         self.quantileVal = 0.90
-        I = io.imread(path)
+        I = io.imread(path, plugin='matplotlib')
         Irs = transform.rescale(I, self.IMsizereduce, multichannel=True)
         Irs = Irs[:,30:130,:] ## cut off edges where black -- loses come context due to angled mask
         light_scalar = 80/np.double(np.quantile(Irs.reshape((-1)), self.quantileVal))
@@ -58,7 +59,10 @@ class preproc_imgs:
 
     def proc_imgs(self, path):
 
-        I = io.imread(path)
+        try:
+            I = io.imread(path, plugin='matplotlib')
+        except:
+            return np.nan, np.nan
 
         Irs = transform.rescale(I, self.IMsizereduce, multichannel=True)
         Irs = Irs[:,30:130,:] ## cut off edges where black -- loses come context due to angled mask
@@ -111,7 +115,7 @@ class preproc_imgs:
             trench_right_loc = trench_feat_zero_locs[temp[-1] + 1]
 
         ## ## ## if edges are messed up then swap them
-        if trench_left_loc >= trench_right_loc:
+        if trench_left_loc > trench_right_loc:
             temp = trench_left_loc
             trench_left_loc = trench_right_loc
             trench_right_loc = temp
@@ -119,23 +123,32 @@ class preproc_imgs:
         ## (1) get trench edge locations
         ## (2) calculate trench width, avg value in trench, avg value outside of trench
         ## (3)store in vectors as signal for log
-        trench_inside_tr_meanperc_signal = np.median(trench_feat[trench_left_loc:trench_right_loc])
-        ## ## ## median
-        trench_outside_tr_meanperc_signal = np.median(np.vstack((trench_feat[1:trench_left_loc], trench_feat[trench_right_loc:])))
+        if trench_left_loc != trench_right_loc:
+            trench_inside_tr_meanperc_signal = np.median(trench_feat[trench_left_loc:trench_right_loc])
+            ## ## ## median
+            trench_outside_tr_meanperc_signal = np.median(np.vstack((trench_feat[1:trench_left_loc], trench_feat[trench_right_loc:])))
 
-        median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
+            median_fur_quality = trench_inside_tr_meanperc_signal - trench_outside_tr_meanperc_signal
+        else:
+            median_fur_quality = 0
 
         return I2, median_fur_quality
 
+if __name__ == '__main__':
+    listing = []
+    listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png'))
+    listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png'))
+    listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png'))
+    ## 3384
+    preproc_imgs_ = preproc_imgs(listing[0])
 
-listing = []
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png'))
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png'))
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png'))
+    # proc_imgs_list = []
+    # with warnings.catch_warnings():
+    #     warnings.filterwarnings(action="ignore", category=RuntimeWarning)#, module=r'Images(.*?)')
+    #     for item in listing[:5]:
+    #         proc_imgs_list.append(preproc_imgs_.proc_imgs(item))
 
-preproc_imgs_ = preproc_imgs(listing[0])
+    with Pool(24) as p:
+            proc_imgs_list = list(tqdm.tqdm(p.imap_unordered(preproc_imgs_.proc_imgs, listing), total=len(listing)))
 
-with Pool(8) as p:
-    proc_imgs_list = list(tqdm.tqdm(p.map(preproc_imgs_.proc_imgs, listing), total=len(listing)))
-
-np.save(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\extracted_trench_quality_signals\feat_ext_preproc_data.npy', proc_imgs_list)
+    np.save(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\extracted_trench_quality_signals\feat_ext_preproc_data.npy', proc_imgs_list)
