@@ -14,39 +14,22 @@ import scipy
 import sklearn.mixture
 from skimage.transform import resize
 
-# def img_preprocessing(x_in, args):
-#
-#     return rand_crop, tf.squeeze(tf.matmul(tf.reshape(rand_crop, [1,-1]), args.vh))
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
 
-def load_dataset(args, listing):
+def load_dataset(args, data_len):
     tf.random.set_seed(args.manualSeed)
     np.random.seed(args.manualSeed)
     random.seed(args.manualSeed)
 
-    preproc_imgs_ = preproc_imgs(listing[0])
-
-    img_preprocessing_ = preproc_imgs_.proc_imgs
-
-    data_split_ind = np.random.permutation(len(listing))
+    data_split_ind = np.random.permutation(data_len)
     train_ind = data_split_ind[:int((1-2*args.p_val)*len(data_split_ind))]
     val_ind = data_split_ind[int((1 - 2 * args.p_val) * len(data_split_ind)):int((1 - args.p_val) * len(data_split_ind))]
     test_ind = data_split_ind[int((1 - args.p_val) * len(data_split_ind)):]
 
-    # dataset_train = tf.data.Dataset.from_tensor_slices(listing[train_ind])  # .float().to(args.device)
-    # dataset_train = dataset_train.shuffle(buffer_size=len(train_ind)).map(img_preprocessing_,
-    #     num_parallel_calls=args.parallel).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
-    # # dataset_train = dataset_train.shuffle(buffer_size=len(train)).batch(batch_size=args.batch_dim).prefetch(buffer_size=args.prefetch_size)
-    #
-    # dataset_valid = tf.data.Dataset.from_tensor_slices(listing[val_ind])  # .float().to(args.device)
-    # dataset_valid = dataset_valid.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
-    #     batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
-    # # dataset_valid = dataset_valid.batch(batch_size=args.batch_dim*2).prefetch(buffer_size=args.prefetch_size)
-    #
-    # dataset_test = tf.data.Dataset.from_tensor_slices(listing[test_ind])  # .float().to(args.device)
-    # dataset_test = dataset_test.map(img_preprocessing_, num_parallel_calls=args.parallel).batch(
-    #     batch_size=args.batch_dim * 2).prefetch(buffer_size=args.prefetch_size)
-
-    return dataset_train, dataset_valid, dataset_test
+    return train_ind, val_ind, test_ind
 
 def create_model(args):
 
@@ -55,21 +38,21 @@ def create_model(args):
 
     actfun = tf.nn.elu
 
-    inputs = tf.keras.Input(shape=args.rand_box, name='img')  ## (108, 192, 3)
-    x = layers.Conv2D(32, 7, activation=actfun, strides=2)(inputs)
+    inputs = tf.keras.Input(shape=args.img_size, name='img')  ## (108, 192, 3)
+    x = layers.Conv2D(32, 7, activation=actfun, strides=3)(inputs)
     block_output = layers.Conv2D(32,3,strides=2, activation=None)(x)
     # block_output = layers.MaxPooling2D(3, strides=2)(x)
+
+    x = layers.Conv2D(32, 1, activation=actfun, padding='same')(block_output)
+    x = layers.Conv2D(32, 3, activation=None, padding='same')(x)
+    x = layers.add([x, block_output])
+    x = layers.Conv2D(64, 1, activation=actfun)(x)
+    block_output = layers.AveragePooling2D(pool_size=3, strides=2)(x)
 
     x = layers.Conv2D(64, 1, activation=actfun, padding='same')(block_output)
     x = layers.Conv2D(64, 3, activation=None, padding='same')(x)
     x = layers.add([x, block_output])
     x = layers.Conv2D(64, 1, activation=actfun)(x)
-    # x = layers.AveragePooling2D(pool_size=3, strides=2)(x)
-    #
-    # x = layers.Conv2D(32, 1, activation=actfun, padding='same')(block_output)
-    # x = layers.Conv2D(32, 3, activation=None, padding='same')(x)
-    # x = layers.add([x, block_output])
-    # x = layers.Conv2D(32, 1, activation=actfun)(x)
     # block_output = layers.AveragePooling2D(2, strides=2)(x)
 
     # x = layers.Conv2D(32, 1, activation=actfun)(x)
@@ -78,20 +61,19 @@ def create_model(args):
 
     x = layers.Flatten()(x)
     x = layers.Dense(3, activation=actfun)(x)
-    quality = tf.nn.sigmoid(layers.Dense(1)(x))
+    quality = tf.nn.tanh(layers.Dense(1)(x))
     model = tf.keras.Model(inputs, quality, name='toy_resnet')
     model.summary()
 
     return model
 
-def train(model, optimizer, scheduler, data_loader_train, data_loader_val, data_loader_test, args):
+def train(model, optimizer, scheduler, imgs, quality_y, train_ind, val_ind, test_ind, args):
 
     for epoch in range(args.start_epoch, args.start_epoch + args.epochs):
 
-        for x_mb, y_mb in data_loader_train:
-            with tf.GradientTape(watch_accessed_variables=False) as tape:
-                tape.watch(model.trainable_variables)
-                loss = tf.reduce_mean(tf.math.squared_difference(y_mb, model(x_mb, training=True)))
+        for ind in batch(train_ind, args.batch_dim):
+            with tf.GradientTape() as tape:
+                loss = tf.reduce_mean(tf.math.squared_difference(quality_y[ind,:], model(imgs[ind,:,:,:], training=True)))
             grads = tape.gradient(loss, model.trainable_variables)
             grads = [None if grad is None else tf.clip_by_norm(grad, clip_norm=args.clip_norm) for grad in grads]
             globalstep = optimizer.apply_gradients(zip(grads, model.trainable_variables))
@@ -101,15 +83,15 @@ def train(model, optimizer, scheduler, data_loader_train, data_loader_val, data_
         ## variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='batch_normalization')
 
         validation_loss = []
-        for x_mb, y_mb in data_loader_val:
-            loss = tf.reduce_mean(tf.math.squared_difference(y_mb, model(x_mb, training=False))).numpy()
+        for ind in batch(val_ind, 2*args.batch_dim):
+            loss = tf.reduce_mean(tf.math.squared_difference(quality_y[ind,:], model(imgs[ind,:,:,:], training=False))).numpy()
             validation_loss.append(loss)
         validation_loss = tf.reduce_mean(validation_loss)
         # print("validation loss:  " + str(validation_loss))
 
         test_loss=[]
-        for x_mb, y_mb in data_loader_test:
-            loss = tf.reduce_mean(tf.math.squared_difference(y_mb, model(x_mb, training=False))).numpy()
+        for ind in batch(test_ind, 2*args.batch_dim):
+            loss = tf.reduce_mean(tf.math.squared_difference(quality_y[ind,:], model(imgs[ind,:,:,:], training=False))).numpy()
             test_loss.append(loss)
         test_loss = tf.reduce_mean(test_loss)
 
@@ -173,13 +155,15 @@ args.p_val = 0.2
 
 args.path = os.path.join(args.tensorboard, 'furrowfeat_{}'.format(str(datetime.datetime.now())[:-7].replace(' ', '-').replace(':', '-')))
 
-listing = []
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 15\*.png'))
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 17\*.png'))
-listing.extend(glob.glob(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\West Bilsland Left Wing Log 19\*.png'))
+data = np.load(r'Z:\current\Projects\Deere\Seeding\2019\Data\SeedFurrowCamera\Extracted Images\extracted_trench_quality_signals\feat_ext_preproc_data.npy', allow_pickle=True)
+imgs = np.array([x for x in data[:,0]]).astype(np.float32)/np.float32(255)
+
+quality_y = np.array([x for x in data[:,1]]).astype(np.float32).reshape(-1,1)
+args.img_size = imgs[0].shape
+data = []
 
 print('Loading dataset..')
-data_loader_train, data_loader_valid, data_loader_test = load_dataset(args, listing)
+train_ind, val_ind, test_ind = load_dataset(args, imgs.shape[0])
 
 if args.save and not args.load:
     print('Creating directory experiment..')
@@ -219,7 +203,7 @@ print('Creating scheduler..')
 scheduler = EarlyStopping(model=model, patience=args.early_stopping, args=args, root=root)
 
 with tf.device(args.device):
-    train(model, optimizer, scheduler, data_loader_train, data_loader_valid, data_loader_test, args)
+    train(model, optimizer, scheduler, imgs, quality_y, train_ind, val_ind, test_ind, args)
 
 # ###################### inference #################################
     embeds = tf.keras.Model(model.input, model.layers[-2].output, name='embeds')
@@ -230,23 +214,15 @@ with tf.device(args.device):
     # test_data = np.vstack([np.expand_dims(img_load(x, args), axis=0) for x in test_data])/128.0 - 1
     # all_data = np.concatenate((train_data, test_data))
 
-    rand_crops_imgs = []
     rand_crops_embeds = []
-    for _ in range(10):
-        temp = [x for x in data_loader_train]
-        rand_crops_imgs.extend(temp[0][0].numpy())
-        rand_crops_embeds.extend(embeds(temp[0][0]))
+    for x in batch(data, 2*args.batch_dim):
+        rand_crops_embeds.extend(embeds(x[:,0]))
 
-    for _ in range(10):
-        temp = [x for x in data_loader_test]
-        rand_crops_imgs.extend(temp[0][0].numpy())
-        rand_crops_embeds.extend(embeds(temp[0][0]))
 
-    rand_crops_imgs = np.stack(rand_crops_imgs)
     rand_crops_embeds = np.stack(rand_crops_embeds)
 
 # if __name__ == '__main__':
 #     main()
 
-#### tensorboard --logdir=D:\pycharm_projects\GQC_self_supervised
+#### tensorboard --logdir=C:\Users\justjo\PycharmProjects\furrowFeatureExtractor\tensorboard
 ## http://localhost:6006/
