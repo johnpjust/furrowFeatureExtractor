@@ -47,20 +47,20 @@ def create_model(args):
     x = layers.Conv2D(32, 3, activation=None, padding='same')(x)
     x = layers.add([x, block_output])
     x = layers.Conv2D(64, 1, activation=actfun)(x)
-    block_output = layers.AveragePooling2D(pool_size=3, strides=2)(x)
+    block_output = layers.MaxPooling2D(pool_size=3, strides=2)(x)
 
     x = layers.Conv2D(64, 1, activation=actfun, padding='same')(block_output)
     x = layers.Conv2D(64, 3, activation=None, padding='same')(x)
     x = layers.add([x, block_output])
     x = layers.Conv2D(64, 1, activation=actfun)(x)
-    # block_output = layers.AveragePooling2D(2, strides=2)(x)
+    # block_output = layers.MaxPooling2D(2, strides=2)(x)
 
     # x = layers.Conv2D(32, 1, activation=actfun)(x)
     # x = layers.Conv2D(32, 3, activation=None)(x)
     x = layers.GlobalAveragePooling2D()(x)
 
     x = layers.Flatten()(x)
-    x = layers.Dense(3, activation=actfun)(x)
+    x = layers.Dense(4, activation=actfun)(x)
     quality = tf.nn.tanh(layers.Dense(1)(x))
     model = tf.keras.Model(inputs, quality, name='toy_resnet')
     model.summary()
@@ -71,7 +71,7 @@ def train(model, optimizer, scheduler, imgs, quality_y, train_ind, val_ind, test
 
     for epoch in range(args.start_epoch, args.start_epoch + args.epochs):
 
-        for ind in batch(train_ind, args.batch_dim):
+        for ind in batch(np.random.permutation(train_ind), args.batch_dim):
             with tf.GradientTape() as tape:
                 loss = tf.reduce_mean(tf.math.squared_difference(quality_y[ind,:], model(imgs[ind,:,:,:], training=True)))
             grads = tape.gradient(loss, model.trainable_variables)
@@ -144,7 +144,7 @@ args.patience = 10
 args.load = r''
 args.save = True
 args.tensorboard = r'C:\Users\justjo\PycharmProjects\furrowFeatureExtractor\tensorboard'
-args.early_stopping = 50
+args.early_stopping = 10
 args.manualSeed = None
 args.manualSeedw = None
 args.prefetch_size = 2  # data pipeline prefetch buffer size
@@ -206,7 +206,7 @@ with tf.device(args.device):
     train(model, optimizer, scheduler, imgs, quality_y, train_ind, val_ind, test_ind, args)
 
 # ###################### inference #################################
-    embeds = tf.keras.Model(model.input, model.layers[-2].output, name='embeds')
+    embeds = tf.keras.Model(model.input, model.layers[-3].output, name='embeds')
 
     # train_data = glob.glob(r'D:\GQC_Images\GQ_Images\Corn_2017_2018/*.png')
     # train_data = np.vstack([np.expand_dims(img_load(x, args), axis=0) for x in train_data])/128.0 - 1
@@ -215,11 +215,19 @@ with tf.device(args.device):
     # all_data = np.concatenate((train_data, test_data))
 
     rand_crops_embeds = []
-    for x in batch(data, 2*args.batch_dim):
-        rand_crops_embeds.extend(embeds(x[:,0]))
-
+    for x in batch(imgs, 2*args.batch_dim):
+        rand_crops_embeds.extend(embeds(x))
 
     rand_crops_embeds = np.stack(rand_crops_embeds)
+
+    np.savetxt(r'C:\Users\justjo\PycharmProjects\furrowFeatureExtractor\tensorboard\furrowfeat_2020-01-30-18-58-47\embeds.csv', rand_crops_embeds, delimiter=',')
+
+    import matplotlib.pyplot as plt
+    from sklearn.neighbors import NearestNeighbors
+    nbrs = NearestNeighbors(n_neighbors=6, algorithm='ball_tree').fit(rand_crops_embeds)
+    # distances, indices = nbrs.kneighbors(np.array([-0.35703278, -0.33590597, -0.8081483 , -0.01309389]).reshape(-1,4))  ## rand_crops_embeds[30212,:] [-0.84653145, -0.14351833, -0.8278878 , -0.7618342 ]
+    distances, indices = nbrs.kneighbors(np.array([-0.24539942, -0.5202056 , -0.61923814, -0.25972468]).reshape(-1, 4))
+    plt.figure();plt.imshow(np.uint8(imgs[indices[0][5]]*255))
 
 # if __name__ == '__main__':
 #     main()
